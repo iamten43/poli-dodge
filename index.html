@@ -1,0 +1,563 @@
+<!DOCTYPE html><html lang="ko"><head><meta charset="UTF-8"/><meta name="viewport" content="width=device-width,initial-scale=1.0"/><script>
+(function(){
+  var __k="e63406c9-2804-4045-89b9-f69cde150392";
+  var __a=null;
+  var __preload=null;
+  if(!__k)return;
+  var _f=window.fetch;
+  // S3 URL → file_key 추출 후 __a 매핑 lookup → assets/ 로컬 경로 치환
+  // 응답에 새 signed URL이 와도 같은 file_key면 같은 assets/ → 영구 작동
+  function patchUrls(data){
+    if(!__a)return data;
+    try{
+      var s=JSON.stringify(data);
+      // 응답 안의 모든 S3 URL을 정규식으로 찾고, file_key 추출 → 매핑 lookup
+      s=s.replace(/https:\/\/prod-files-secure\.s3\.amazonaws\.com\/[^"\s<>]+/g,function(url){
+        var m=url.match(/\.amazonaws\.com\/([^?\\]+)/);
+        if(!m)return url;
+        var key=m[1].replace(/\\u002F/g,"/");
+        return __a[key]||url;
+      });
+      return JSON.parse(s);
+    }catch(e){return data;}
+  }
+  function callMisiso(method,path,body){
+    return _f("https://misiso.com/api/notion/deploy-proxy",{
+      method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({deployKey:__k,path:path,method:method,body:body})
+    }).then(function(r){
+      var status=r.status;
+      return r.json().then(function(data){return {status:status,data:patchUrls(data)};});
+    });
+  }
+  // preload pattern — 페이지 로드와 병렬로 정적 fetch 호출 미리 시작
+  var __preloadCache={};
+  if(__preload){
+    for(var i=0;i<__preload.length;i++){
+      (function(c){
+        var key=c.method+":"+c.path+":"+(c.body?JSON.stringify(c.body):"");
+        __preloadCache[key]=callMisiso(c.method,c.path,c.body);
+      })(__preload[i]);
+    }
+  }
+  window.fetch=function(url,opts){
+    var u=typeof url==="string"?url:String(url);
+    if(!u.startsWith("/api/notion/"))return _f.apply(this,arguments);
+    var path=u.slice("/api/notion".length);
+    var method=(opts&&opts.method)||"GET";
+    var body;
+    try{body=opts&&opts.body?JSON.parse(opts.body):undefined;}catch(e){body=opts&&opts.body;}
+    var ck=method+":"+path+":"+(body?JSON.stringify(body):"");
+    var promise=__preloadCache[ck];
+    if(promise){delete __preloadCache[ck];}
+    else{promise=callMisiso(method,path,body);}
+    return promise.then(function(res){
+      return new Response(JSON.stringify(res.data),{
+        status:res.status,
+        headers:{"Content-Type":"application/json"}
+      });
+    });
+  };
+})();
+</script>
+<meta property="og:type" content="website">
+<link rel="preconnect" href="https://misiso.com" crossorigin/>
+<meta property="og:title" content="로보카폴리 폭탄피하기"/>
+<meta property="og:description" content="로보카폴리 폭탄피하기"/>
+<title>로보카폴리 폭탄피하기</title>
+<meta name="description" content="로보카폴리 폭탄피하기"/>
+<meta property="og:image" content="https://iamten43.github.io/poli-dodge/og-image-008zmo6y.png"/>
+<meta property="og:image:width" content="1200"/>
+<meta property="og:image:height" content="630"/>
+<meta name="twitter:card" content="summary_large_image"/>
+<meta name="twitter:image" content="https://iamten43.github.io/poli-dodge/og-image-008zmo6y.png"/>
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns%3D'http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg'%20viewBox%3D'0%200%2032%2032'%3E%3Crect%20width%3D'32'%20height%3D'32'%20rx%3D'6'%20fill%3D'%233b82f6'%2F%3E%3Ctext%20x%3D'16'%20y%3D'22'%20text-anchor%3D'middle'%20font-size%3D'18'%20fill%3D'white'%20font-family%3D'sans-serif'%3ER%3C%2Ftext%3E%3C%2Fsvg%3E"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html, body {
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Noto Sans KR', sans-serif;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
+  background: #0f172a;
+}
+
+#root, .game-app {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* ===== 캐릭터 선택 화면 ===== */
+.select-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: linear-gradient(180deg, #fef3c7 0%, #fde047 35%, #60a5fa 100%);
+  position: relative;
+  overflow: hidden;
+}
+
+.select-screen::before {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 25%;
+  background: linear-gradient(180deg, transparent 0%, #475569 50%, #1e293b 100%);
+}
+
+.select-title {
+  font-size: clamp(1.6rem, 5vw, 2.6rem);
+  font-weight: 900;
+  color: #1e3a8a;
+  text-shadow: 3px 3px 0 #fde047, 6px 6px 0 rgba(0,0,0,0.15);
+  margin-bottom: 0.4rem;
+  letter-spacing: -0.02em;
+  text-align: center;
+  z-index: 1;
+}
+
+.select-subtitle {
+  font-size: clamp(0.85rem, 2vw, 1.1rem);
+  color: #1e40af;
+  margin-bottom: 1.2rem;
+  font-weight: 600;
+  z-index: 1;
+}
+
+.best-display {
+  background: rgba(255,255,255,0.92);
+  border-radius: 999px;
+  padding: 0.5rem 1.2rem;
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 1;
+}
+
+.char-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.8rem;
+  width: 100%;
+  max-width: 720px;
+  padding: 0 0.5rem;
+  z-index: 1;
+}
+
+@media (max-width: 600px) {
+  .char-grid {
+    grid-template-columns: repeat(2, 1fr);
+    max-width: 380px;
+  }
+}
+
+.char-card {
+  background: white;
+  border-radius: 1rem;
+  padding: 1rem 0.6rem;
+  cursor: pointer;
+  border: 4px solid transparent;
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45rem;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.15);
+  font-family: inherit;
+}
+
+.char-card:hover {
+  transform: translateY(-6px);
+  border-color: #fbbf24;
+  box-shadow: 0 14px 24px rgba(0,0,0,0.2);
+}
+
+.char-card:active {
+  transform: translateY(-2px);
+}
+
+.char-icon {
+  width: 70px;
+  height: 70px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2rem;
+  background: var(--char-bg);
+  border: 3px solid var(--char-accent);
+  box-shadow: inset 0 -5px 0 rgba(0,0,0,0.18), 0 4px 8px rgba(0,0,0,0.2);
+}
+
+.char-name {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #1e293b;
+}
+
+.char-role {
+  font-size: 0.78rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.mute-btn-fixed {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+}
+
+/* ===== 게임 화면 ===== */
+.game-screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  overflow: hidden;
+}
+
+.hud {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.55rem 0.9rem;
+  background: rgba(15, 23, 42, 0.88);
+  color: white;
+  z-index: 10;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+}
+
+.hud-stat {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
+.hud-label {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.hud-value {
+  font-size: 1.3rem;
+  font-weight: 900;
+  color: white;
+  font-variant-numeric: tabular-nums;
+}
+
+.hud-value.best {
+  color: #fde047;
+}
+
+.mute-btn {
+  background: rgba(255,255,255,0.18);
+  border: none;
+  border-radius: 999px;
+  width: 42px;
+  height: 42px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: white;
+  font-size: 1.2rem;
+  transition: background 0.2s, transform 0.15s;
+  font-family: inherit;
+}
+
+.mute-btn:hover {
+  background: rgba(255,255,255,0.32);
+}
+
+.mute-btn:active {
+  transform: scale(0.92);
+}
+
+.play-area {
+  flex: 1;
+  position: relative;
+  background: linear-gradient(180deg, #60a5fa 0%, #93c5fd 35%, #cbd5e1 65%, #475569 100%);
+  overflow: hidden;
+  cursor: grab;
+  touch-action: none;
+}
+
+.play-area:active {
+  cursor: grabbing;
+}
+
+.cloud {
+  position: absolute;
+  background: rgba(255,255,255,0.78);
+  border-radius: 999px;
+  pointer-events: none;
+  box-shadow: 0 4px 8px rgba(0,0,0,0.05);
+}
+
+.cloud-1 { width: 80px; height: 22px; top: 12%; left: 110%; animation: drift 22s linear infinite; }
+.cloud-2 { width: 110px; height: 28px; top: 24%; left: 110%; animation: drift 32s linear infinite -8s; }
+.cloud-3 { width: 60px; height: 18px; top: 8%; left: 110%; animation: drift 26s linear infinite -16s; }
+
+@keyframes drift {
+  from { transform: translateX(0); }
+  to { transform: translateX(-160vw); }
+}
+
+.road {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 14%;
+  background: #475569;
+  border-top: 4px solid #1e293b;
+  overflow: hidden;
+}
+
+.road::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 5px;
+  margin-top: -2px;
+  background: repeating-linear-gradient(
+    90deg,
+    #fde047 0px,
+    #fde047 28px,
+    transparent 28px,
+    transparent 56px
+  );
+  animation: roadmove 0.6s linear infinite;
+}
+
+@keyframes roadmove {
+  from { background-position: 0 0; }
+  to { background-position: -56px 0; }
+}
+
+.player {
+  position: absolute;
+  bottom: 18px;
+  width: 60px;
+  height: 60px;
+  border-radius: 14px;
+  background: var(--char-bg);
+  border: 3px solid var(--char-accent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.9rem;
+  box-shadow: inset 0 -6px 0 rgba(0,0,0,0.22), 0 6px 14px rgba(0,0,0,0.35);
+  pointer-events: none;
+  z-index: 5;
+  will-change: transform, left;
+}
+
+.bomb {
+  position: absolute;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.7rem;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.3));
+  pointer-events: none;
+  will-change: top, left;
+}
+
+/* ===== 게임 오버 오버레이 ===== */
+.gameover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.82);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 20;
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: fadeIn 0.3s ease-out;
+  padding: 1rem;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.gameover-card {
+  background: white;
+  border-radius: 1.5rem;
+  padding: 2rem 1.5rem;
+  text-align: center;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+  animation: popIn 0.45s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes popIn {
+  from { transform: scale(0.6); opacity: 0; }
+  to { transform: scale(1); opacity: 1; }
+}
+
+.gameover-trophy {
+  font-size: 4rem;
+  margin-bottom: 0.3rem;
+  animation: bounce 1s ease-in-out infinite;
+}
+
+@keyframes bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-12px); }
+}
+
+.gameover-title {
+  font-size: 1.6rem;
+  font-weight: 900;
+  color: #1e293b;
+  margin-bottom: 0.3rem;
+}
+
+.gameover-record {
+  color: #f59e0b;
+  font-weight: 700;
+  margin-bottom: 1rem;
+  font-size: 0.95rem;
+}
+
+.gameover-stats {
+  display: flex;
+  gap: 0.7rem;
+  justify-content: center;
+  margin-bottom: 1.3rem;
+}
+
+.gameover-stat {
+  background: #f1f5f9;
+  border-radius: 0.8rem;
+  padding: 0.7rem 0.9rem;
+  flex: 1;
+  max-width: 140px;
+}
+
+.gameover-stat-label {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 600;
+  margin-bottom: 0.15rem;
+}
+
+.gameover-stat-value {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #1e293b;
+  font-variant-numeric: tabular-nums;
+}
+
+.gameover-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.btn {
+  border: none;
+  border-radius: 999px;
+  padding: 0.85rem 1.4rem;
+  font-size: 1rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: transform 0.12s, box-shadow 0.12s;
+  font-family: inherit;
+}
+
+.btn-primary {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  color: white;
+  box-shadow: 0 4px 0 #1e40af;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 0 #1e40af;
+}
+
+.btn-primary:active {
+  transform: translateY(2px);
+  box-shadow: 0 2px 0 #1e40af;
+}
+
+.btn-secondary {
+  background: #f1f5f9;
+  color: #475569;
+  border: 2px solid #e2e8f0;
+}
+
+.btn-secondary:hover {
+  background: #e2e8f0;
+}
+
+.intro-hint {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(15, 23, 42, 0.78);
+  color: white;
+  padding: 0.9rem 1.4rem;
+  border-radius: 1rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
+  pointer-events: none;
+  animation: hintFade 2.5s ease-out forwards;
+  z-index: 8;
+  white-space: nowrap;
+}
+
+@keyframes hintFade {
+  0% { opacity: 0; transform: translate(-50%, -40%); }
+  20%, 70% { opacity: 1; transform: translate(-50%, -50%); }
+  100% { opacity: 0; transform: translate(-50%, -65%); }
+}
+</style>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>if(window.Babel)Babel.disableScriptTags=true;</script>
+</head><body><div id="root"></div>
+<rect width='32' height='32' rx='6' fill='%233b82f6'/><text x='16' y='23' text-anchor='middle' font-size='20' fill='white' font-family='sans-serif'>폴</text></svg>"><script type="module">
+var __np_strip_imports=function(){return{visitor:{ImportDeclaration:function(path){var src=path.node.source.value;if(src.indexOf("./")===0||src.indexOf("../")===0)path.remove();},ExportDefaultDeclaration:function(path){var decl=path.node.declaration;if(decl.type==="FunctionDeclaration"||decl.type==="ClassDeclaration"){path.replaceWith(decl);}else{path.replaceWith({type:"VariableDeclaration",kind:"var",declarations:[{type:"VariableDeclarator",id:{type:"Identifier",name:"_default"},init:decl}]});}},ExportNamedDeclaration:function(path){if(path.node.declaration){path.replaceWith(path.node.declaration);}else{path.remove();}},ExportAllDeclaration:function(path){path.remove();}}};};
+var __np_dedupe_top_consts=function(){var _s={};return{visitor:{VariableDeclaration:function(p){if(p.parent.type!=="Program")return;if(p.node.kind!=="const"&&p.node.kind!=="let")return;var kept=[];for(var i=0;i<p.node.declarations.length;i++){var d=p.node.declarations[i];var n=d.id&&d.id.type==="Identifier"?d.id.name:null;if(n&&_s[n]){}else{if(n)_s[n]=true;kept.push(d);}}if(kept.length===0){p.remove();}else{p.node.declarations=kept;}}}}};
+var __np_jsx_decode=function(){function _d(v){v=v.replace(/\\u\{([0-9a-fA-F]+)\}/g,function(_,h){return String.fromCodePoint(parseInt(h,16));});v=v.replace(/\\u([0-9a-fA-F]{4})/g,function(_,h){return String.fromCharCode(parseInt(h,16));});return v;}return{visitor:{JSXText:function(p){p.node.value=_d(p.node.value);},StringLiteral:function(p){if(!p.parent||p.parent.type!=="JSXAttribute")return;p.node.value=_d(p.node.value);}}}};
+var __code="import React from 'https://esm.sh/react';\nimport ReactDOM from 'https://esm.sh/react-dom/client';\nimport { useState, useEffect, useRef, useCallback } from 'https://esm.sh/react';\n\nconst CHARACTERS = [\n  { id: 'poli',  name: '폴리', role: '경찰차', emoji: '🚓', bg: '#3b82f6', accent: '#1e3a8a' },\n  { id: 'roy',   name: '로이', role: '소방차', emoji: '🚒', bg: '#ef4444', accent: '#7f1d1d' },\n  { id: 'amber', name: '엠버', role: '구급차', emoji: '🚑', bg: '#f8fafc', accent: '#94a3b8' },\n  { id: 'helly', name: '헬리', role: '헬기',  emoji: '🚁', bg: '#facc15', accent: '#a16207' },\n];\n\nconst STORAGE_KEY = 'poli_bomb_dodge_best_v1';\nconst PLAYER_SIZE = 60;\nconst BOMB_SIZE = 32;\nconst COLLISION_PADDING = 4;\n\nfunction formatTime(s) {\n  return (s || 0).toFixed(1);\n}\n\nfunction App() {\n  const [phase, setPhase] = useState('select');\n  const [selectedChar, setSelectedChar] = useState(null);\n  const [bestScore, setBestScore] = useState(0);\n  const [survivalTime, setSurvivalTime] = useState(0);\n  const [isNewRecord, setIsNewRecord] = useState(false);\n  const [muted, setMuted] = useState(false);\n  const [showHint, setShowHint] = useState(false);\n\n  const playerXRatioRef = useRef(0.5);\n  const bombsRef = useRef([]);\n  const gameStartRef = useRef(0);\n  const lastSpawnRef = useRef(0);\n  const animFrameRef = useRef(null);\n  const audioCtxRef = useRef(null);\n  const playAreaRef = useRef(null);\n  const keysRef = useRef({ left: false, right: false });\n  const mutedRef = useRef(false);\n\n  useEffect(() => { mutedRef.current = muted; }, [muted]);\n\n  // 최고 기록 로드\n  useEffect(() => {\n    try {\n      const saved = localStorage.getItem(STORAGE_KEY);\n      if (saved) {\n        const v = parseFloat(saved);\n        if (!Number.isNaN(v)) setBestScore(v);\n      }\n    } catch (e) {\n      console.warn('[Game] localStorage 읽기 실패:', e.message);\n    }\n  }, []);\n\n  const ensureAudio = useCallback(() => {\n    if (audioCtxRef.current) return audioCtxRef.current;\n    try {\n      const Ctx = window.AudioContext || window.webkitAudioContext;\n      if (Ctx) audioCtxRef.current = new Ctx();\n    } catch (e) {\n      console.warn('[Game] AudioContext 생성 실패:', e.message);\n    }\n    return audioCtxRef.current;\n  }, []);\n\n  const playSound = useCallback((type) => {\n    if (mutedRef.current) return;\n    const ctx = ensureAudio();\n    if (!ctx) return;\n    if (ctx.state === 'suspended') {\n      ctx.resume().catch((e) => console.warn('[Audio] resume 실패:', e.message));\n    }\n    const now = ctx.currentTime;\n\n    const tone = (freq, start, dur, kind, vol) => {\n      const osc = ctx.createOscillator();\n      const gain = ctx.createGain();\n      osc.type = kind;\n      osc.frequency.setValueAtTime(freq, now + start);\n      gain.gain.setValueAtTime(vol, now + start);\n      gain.gain.exponentialRampToValueAtTime(0.001, now + start + dur);\n      osc.connect(gain);\n      gain.connect(ctx.destination);\n      osc.start(now + start);\n      osc.stop(now + start + dur);\n    };\n\n    if (type === 'start') {\n      tone(523, 0,    0.22, 'triangle', 0.2);\n      tone(659, 0.1,  0.22, 'triangle', 0.2);\n      tone(784, 0.2,  0.32, 'triangle', 0.22);\n    } else if (type === 'gameover') {\n      // 폭발음: 노이즈 + 저주파 부움\n      const noiseLen = Math.floor(ctx.sampleRate * 0.55);\n      const buf = ctx.createBuffer(1, noiseLen, ctx.sampleRate);\n      const data = buf.getChannelData(0);\n      for (let i = 0; i < noiseLen; i++) {\n        data[i] = (Math.random() * 2 - 1) * (1 - i / noiseLen);\n      }\n      const noise = ctx.createBufferSource();\n      noise.buffer = buf;\n      const ngain = ctx.createGain();\n      ngain.gain.setValueAtTime(0.5, now);\n      ngain.gain.exponentialRampToValueAtTime(0.001, now + 0.55);\n      noise.connect(ngain);\n      ngain.connect(ctx.destination);\n      noise.start(now);\n\n      const osc = ctx.createOscillator();\n      const ogain = ctx.createGain();\n      osc.type = 'sawtooth';\n      osc.frequency.setValueAtTime(140, now);\n      osc.frequency.exponentialRampToValueAtTime(40, now + 0.45);\n      ogain.gain.setValueAtTime(0.32, now);\n      ogain.gain.exponentialRampToValueAtTime(0.001, now + 0.45);\n      osc.connect(ogain);\n      ogain.connect(ctx.destination);\n      osc.start(now);\n      osc.stop(now + 0.45);\n    } else if (type === 'record') {\n      // 신기록 팡파레\n      tone(523,  0,    0.18, 'square', 0.16);\n      tone(659,  0.12, 0.18, 'square', 0.16);\n      tone(784,  0.24, 0.18, 'square', 0.16);\n      tone(1047, 0.36, 0.42, 'square', 0.18);\n    }\n  }, [ensureAudio]);\n\n  // 게임 루프\n  useEffect(() => {\n    if (phase !== 'playing') return;\n\n    gameStartRef.current = performance.now();\n    lastSpawnRef.current = performance.now();\n    bombsRef.current = [];\n    playerXRatioRef.current = 0.5;\n\n    let lastFrame = performance.now();\n\n    const loop = (now) => {\n      const dt = Math.min(now - lastFrame, 50);\n      lastFrame = now;\n      const elapsed = (now - gameStartRef.current) / 1000;\n\n      const difficulty = Math.min(elapsed / 12, 6);\n      const spawnInterval = Math.max(600 - difficulty * 90, 90);\n      const baseSpeed = 320 + difficulty * 165;\n\n      while (now - lastSpawnRef.current > spawnInterval) {\n        lastSpawnRef.current += spawnInterval;\n        const cnt = 1 + Math.floor(Math.random() * (1 + Math.floor(difficulty * 0.9)));\n        for (let i = 0; i < cnt; i++) {\n          const isMeteor = difficulty > 3 && Math.random() < 0.18;\n          bombsRef.current.push({\n            id: Math.random().toString(36).slice(2) + i + now.toFixed(0),\n            x: Math.random(),\n            y: -BOMB_SIZE,\n            speed: baseSpeed * (0.85 + Math.random() * 0.35) * (isMeteor ? 1.6 : 1),\n            vx: difficulty > 2 ? (Math.random() - 0.5) * 0.18 * Math.min(difficulty, 5) : 0,\n            meteor: isMeteor,\n          });\n        }\n      }\n\n      const area = playAreaRef.current;\n      if (!area) {\n        animFrameRef.current = requestAnimationFrame(loop);\n        return;\n      }\n      const W = area.clientWidth;\n      const H = area.clientHeight;\n      const minRatio = (PLAYER_SIZE / 2) / W;\n      const maxRatio = 1 - minRatio;\n\n      const moveSpeed = 0.7;\n      if (keysRef.current.left)  playerXRatioRef.current -= (moveSpeed * dt) / 1000;\n      if (keysRef.current.right) playerXRatioRef.current += (moveSpeed * dt) / 1000;\n      playerXRatioRef.current = Math.max(minRatio, Math.min(maxRatio, playerXRatioRef.current));\n\n      const playerCx = playerXRatioRef.current * W;\n      const playerCy = H - 18 - PLAYER_SIZE / 2;\n\n      let collided = false;\n      bombsRef.current.forEach((b) => {\n        b.y += (b.speed * dt) / 1000;\n        if (b.vx) {\n          b.x += (b.vx * dt) / 1000;\n          if (b.x < 0.02) { b.x = 0.02; b.vx = -b.vx; }\n          else if (b.x > 0.98) { b.x = 0.98; b.vx = -b.vx; }\n        }\n        const bsize = b.meteor ? BOMB_SIZE * 1.4 : BOMB_SIZE;\n        const bombCx = b.x * W;\n        const bombCy = b.y + bsize / 2;\n        const dx = Math.abs(bombCx - playerCx);\n        const dy = Math.abs(bombCy - playerCy);\n        if (dx < (PLAYER_SIZE + bsize) / 2 - COLLISION_PADDING &&\n            dy < (PLAYER_SIZE + bsize) / 2 - COLLISION_PADDING) {\n          collided = true;\n        }\n      });\n      bombsRef.current = bombsRef.current.filter((b) => b.y < H + 60);\n\n      setSurvivalTime(elapsed);\n\n      if (collided) {\n        let isRecord = false;\n        if (elapsed > bestScore && elapsed >= 1) {\n          isRecord = true;\n          setBestScore(elapsed);\n          try {\n            localStorage.setItem(STORAGE_KEY, String(elapsed));\n          } catch (e) {\n            console.warn('[Game] localStorage 저장 실패:', e.message);\n          }\n        }\n        setIsNewRecord(isRecord);\n        setPhase('gameover');\n        playSound('gameover');\n        if (isRecord) {\n          setTimeout(() => playSound('record'), 650);\n        }\n        return;\n      }\n\n      animFrameRef.current = requestAnimationFrame(loop);\n    };\n\n    animFrameRef.current = requestAnimationFrame(loop);\n    return () => {\n      if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);\n    };\n  }, [phase, bestScore, playSound]);\n\n  // 키보드 조작\n  useEffect(() => {\n    const onDown = (e) => {\n      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {\n        keysRef.current.left = true;\n        e.preventDefault();\n      }\n      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {\n        keysRef.current.right = true;\n        e.preventDefault();\n      }\n    };\n    const onUp = (e) => {\n      if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') keysRef.current.left = false;\n      if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') keysRef.current.right = false;\n    };\n    window.addEventListener('keydown', onDown);\n    window.addEventListener('keyup', onUp);\n    return () => {\n      window.removeEventListener('keydown', onDown);\n      window.removeEventListener('keyup', onUp);\n    };\n  }, []);\n\n  // 터치/마우스 조작\n  const handlePointer = useCallback((e) => {\n    if (phase !== 'playing') return;\n    const area = playAreaRef.current;\n    if (!area) return;\n    const rect = area.getBoundingClientRect();\n    const cx = e.touches ? e.touches[0].clientX : e.clientX;\n    const ratio = (cx - rect.left) / rect.width;\n    playerXRatioRef.current = Math.max(0, Math.min(1, ratio));\n    if (e.cancelable) e.preventDefault();\n  }, [phase]);\n\n  const startGame = (char) => {\n    ensureAudio();\n    setSelectedChar(char);\n    setSurvivalTime(0);\n    setIsNewRecord(false);\n    bombsRef.current = [];\n    playSound('start');\n    setShowHint(true);\n    setTimeout(() => setShowHint(false), 2500);\n    setTimeout(() => setPhase('playing'), 350);\n  };\n\n  const playAgain = () => {\n    if (selectedChar) startGame(selectedChar);\n  };\n\n  const backToSelect = () => {\n    setPhase('select');\n    setSelectedChar(null);\n    setIsNewRecord(false);\n    bombsRef.current = [];\n  };\n\n  const toggleMute = () => {\n    ensureAudio();\n    setMuted((m) => !m);\n  };\n\n  // ===== 캐릭터 선택 화면 =====\n  if (phase === 'select') {\n    return (\n      <div className=\"game-app\">\n        <div className=\"select-screen\">\n          <button className=\"mute-btn mute-btn-fixed\" onClick={toggleMute} aria-label=\"음소거\">\n            {muted ? '🔇' : '🔊'}\n          </button>\n          <h1 className=\"select-title\">🚓 폭탄 피하기 🚒</h1>\n          <p className=\"select-subtitle\">캐릭터를 골라 게임을 시작하세요</p>\n          <div className=\"best-display\">🏆 최고 기록: {formatTime(bestScore)}초</div>\n          <div className=\"char-grid\">\n            {CHARACTERS.map((c) => {\n              const cardStyle = { '--char-bg': c.bg, '--char-accent': c.accent };\n              return (\n                <button\n                  key={c.id}\n                  className=\"char-card\"\n                  onClick={() => startGame(c)}\n                  style={cardStyle}\n                >\n                  <div className=\"char-icon\">{c.emoji}</div>\n                  <div className=\"char-name\">{c.name}</div>\n                  <div className=\"char-role\">{c.role}</div>\n                </button>\n              );\n            })}\n          </div>\n        </div>\n      </div>\n    );\n  }\n\n  // ===== 게임 / 게임오버 화면 =====\n  const playerStyle = {\n    '--char-bg': selectedChar.bg,\n    '--char-accent': selectedChar.accent,\n    left: (playerXRatioRef.current * 100) + '%',\n    transform: 'translateX(-50%)',\n  };\n\n  return (\n    <div className=\"game-app\">\n      <div className=\"game-screen\">\n        <div className=\"hud\">\n          <div className=\"hud-stat\">\n            <div className=\"hud-label\">생존 시간</div>\n            <div className=\"hud-value\">{formatTime(survivalTime)}s</div>\n          </div>\n          <div className=\"hud-stat\">\n            <div className=\"hud-label\">최고 기록</div>\n            <div className=\"hud-value best\">{formatTime(bestScore)}s</div>\n          </div>\n          <button className=\"mute-btn\" onClick={toggleMute} aria-label=\"음소거\">\n            {muted ? '🔇' : '🔊'}\n          </button>\n        </div>\n        <div\n          className=\"play-area\"\n          ref={playAreaRef}\n          onMouseMove={handlePointer}\n          onTouchStart={handlePointer}\n          onTouchMove={handlePointer}\n        >\n          <div className=\"cloud cloud-1\"></div>\n          <div className=\"cloud cloud-2\"></div>\n          <div className=\"cloud cloud-3\"></div>\n          <div className=\"road\"></div>\n\n          {bombsRef.current.map((b) => {\n            const bs = {\n              left: (b.x * 100) + '%',\n              top: b.y + 'px',\n              transform: b.meteor ? 'translateX(-50%) scale(1.4)' : 'translateX(-50%)',\n            };\n            return <div key={b.id} className=\"bomb\" style={bs}>{b.meteor ? '🔥' : '💣'}</div>;\n          })}\n\n          <div className=\"player\" style={playerStyle}>{selectedChar.emoji}</div>\n\n          {showHint && phase === 'playing' && (\n            <div className=\"intro-hint\">← → 키 또는 화면을 좌우로 움직이세요</div>\n          )}\n\n          {phase === 'gameover' && (\n            <div className=\"gameover-overlay\">\n              <div className=\"gameover-card\">\n                {isNewRecord && <div className=\"gameover-trophy\">🏆</div>}\n                <h2 className=\"gameover-title\">{isNewRecord ? '신기록 달성!' : '게임 오버'}</h2>\n                {isNewRecord && (\n                  <div className=\"gameover-record\">새로운 최고 기록을 세웠어요!</div>\n                )}\n                <div className=\"gameover-stats\">\n                  <div className=\"gameover-stat\">\n                    <div className=\"gameover-stat-label\">이번 기록</div>\n                    <div className=\"gameover-stat-value\">{formatTime(survivalTime)}s</div>\n                  </div>\n                  <div className=\"gameover-stat\">\n                    <div className=\"gameover-stat-label\">최고 기록</div>\n                    <div className=\"gameover-stat-value\">{formatTime(bestScore)}s</div>\n                  </div>\n                </div>\n                <div className=\"gameover-actions\">\n                  <button className=\"btn btn-primary\" onClick={playAgain}>다시하기</button>\n                  <button className=\"btn btn-secondary\" onClick={backToSelect}>캐릭터 다시 선택</button>\n                </div>\n              </div>\n            </div>\n          )}\n        </div>\n      </div>\n    </div>\n  );\n}\n\nReactDOM.createRoot(document.getElementById('root')).render(<App />);";
+try{var __result=Babel.transform(__code,{filename:"app.tsx",presets:["react","typescript"],plugins:[__np_strip_imports,__np_dedupe_top_consts,__np_jsx_decode],generatorOpts:{jsescOption:{minimal:true}},sourceType:"module"});try{var __s=document.createElement("script");__s.type="module";__s.textContent=__result.code;document.head.appendChild(__s);}catch(runErr){console.error("[user code runtime] "+(runErr.message||runErr)+"\n"+(runErr.stack||""));}}catch(transErr){var lm=(transErr.message||"").match(/\((\d+):(\d+)\)/);var ln=lm?parseInt(lm[1],10):0;var cx="";if(ln>0){var ls=__code.split("\n");var s=Math.max(0,ln-3),e=Math.min(ls.length,ln+2);cx="\n--- 사용자 코드 주변 ---\n"+ls.slice(s,e).map(function(l,i){return (s+i+1)+": "+l;}).join("\n");}console.error("[Babel transform 실패] "+(transErr.message||transErr)+cx);}
+</script>
+</body></html>
